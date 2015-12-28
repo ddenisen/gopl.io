@@ -9,7 +9,10 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"math"
+	"net/http"
 	"os"
 )
 
@@ -28,26 +31,63 @@ const (
 var sin30, cos30 = math.Sin(angle), math.Cos(angle) // sin(30°), cos(30°)
 
 func main() {
-	var function PlotFunc = f
-
+	fName := "sin"
 	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "sin":
-			function = f
-		case "saddle":
-			function = saddle
-		case "moguls":
-			function = moguls
-		default:
-			fmt.Fprintf(os.Stderr, "Unsupported function: %s\n", os.Args[1])
-			os.Exit(1)
+		if os.Args[1] == "web" {
+			webServer()
+			return
 		}
+		fName = os.Args[1]
 	}
-	plot(function)
+
+	err := plotByName(fName, os.Stdout)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, *err)
+		os.Exit(1)
+	}
 }
 
-func plot(function PlotFunc) {
-	fmt.Printf("<svg xmlns='http://www.w3.org/2000/svg' "+
+func webServer() {
+	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		request.ParseForm()
+		funcName := request.FormValue("function")
+		if len(funcName) == 0 {
+			// Default to sine curve
+			funcName = "sin"
+		}
+
+		writer.Header().Set("Content-Type", "image/svg+xml")
+		err := plotByName(funcName, writer)
+		if err != nil {
+			writer.Header().Del("Content-Type")
+			writer.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintln(writer, *err)
+		}
+	})
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+func plotByName(name string, out io.Writer) *string {
+	var function PlotFunc
+
+	switch name {
+	case "sin":
+		function = f
+	case "saddle":
+		function = saddle
+	case "moguls":
+		function = moguls
+	default:
+		err := fmt.Sprintf("Unsupported function: %s", os.Args[1])
+		return &err
+	}
+
+	plot(function, out)
+	return nil
+}
+
+func plot(function PlotFunc, out io.Writer) {
+	fmt.Fprintf(out, "<svg xmlns='http://www.w3.org/2000/svg' "+
 		"style='stroke: grey; fill: white; stroke-width: 0.7' "+
 		"width='%d' height='%d'>", width, height)
 	for i := 0; i < cells; i++ {
@@ -62,11 +102,11 @@ func plot(function PlotFunc) {
 				continue
 			}
 
-			fmt.Printf("<polygon points='%g,%g %g,%g %g,%g %g,%g'/>\n",
+			fmt.Fprintf(out, "<polygon points='%g,%g %g,%g %g,%g %g,%g'/>\n",
 				ax, ay, bx, by, cx, cy, dx, dy)
 		}
 	}
-	fmt.Println("</svg>")
+	fmt.Fprintln(out, "</svg>")
 }
 
 func corner(i, j int, function PlotFunc) (float64, float64, bool) {
