@@ -29,10 +29,16 @@ func main() {
 		"width='%d' height='%d'>", width, height)
 	for i := 0; i < cells; i++ {
 		for j := 0; j < cells; j++ {
-			ax, ay := corner(i+1, j)
-			bx, by := corner(i, j)
-			cx, cy := corner(i, j+1)
-			dx, dy := corner(i+1, j+1)
+			ax, ay, aOk := corner(i+1, j)
+			bx, by, bOk := corner(i, j)
+			cx, cy, cOk := corner(i, j+1)
+			dx, dy, dOk := corner(i+1, j+1)
+
+			// Don't plot invalid coordinates...
+			if !(aOk && bOk && cOk && dOk) {
+				continue
+			}
+
 			fmt.Printf("<polygon points='%g,%g %g,%g %g,%g %g,%g'/>\n",
 				ax, ay, bx, by, cx, cy, dx, dy)
 		}
@@ -40,7 +46,7 @@ func main() {
 	fmt.Println("</svg>")
 }
 
-func corner(i, j int) (float64, float64) {
+func corner(i, j int) (float64, float64, bool) {
 	// Find point (x,y) at corner of cell (i,j).
 	x := xyrange * (float64(i)/cells - 0.5)
 	y := xyrange * (float64(j)/cells - 0.5)
@@ -51,7 +57,16 @@ func corner(i, j int) (float64, float64) {
 	// Project (x,y,z) isometrically onto 2-D SVG canvas (sx,sy).
 	sx := width/2 + (x-y)*cos30*xyscale
 	sy := height/2 + (x+y)*sin30*xyscale - z*zscale
-	return sx, sy
+
+	if !isValid(sx) || !isValid(sy) {
+		return 0.0, 0.0, false
+	}
+
+	return sx, sy, true
+}
+
+func isValid(val float64) bool {
+	return !math.IsInf(val, 0) && !math.IsNaN(val)
 }
 
 func f(x, y float64) float64 {
